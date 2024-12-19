@@ -30,14 +30,14 @@
 
     let localStream;
     let peerConnection;
-    const configuration = {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun3.l.google.com:19302' },
-      ]
-    };
+    // const configuration = {
+    //   iceServers: [
+    //     { urls: 'stun:stun.l.google.com:19302' },
+    //     { urls: 'stun:stun1.l.google.com:19302' },
+    //     { urls: 'stun:stun2.l.google.com:19302' },
+    //     { urls: 'stun:stun3.l.google.com:19302' },
+    //   ]
+    // };
 
     // Truy cập camera/microphone
     async function startLocalStream() {
@@ -68,7 +68,7 @@
     // Tạo Peer Connection
     async function createPeerConnection() {
       const server = await getXirsysIceServers();
-      peerConnection = new RTCPeerConnection({ iceServers: server.v.iceServers });
+      peerConnection = new RTCPeerConnection({ iceServers: server });
 
       // Thêm track từ local stream
       localStream.getTracks().forEach((track) => {
