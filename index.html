@@ -30,8 +30,16 @@
 
     let localStream;
     let peerConnection;
+    const configuration = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+      ]
+    };
 
-
+    // Truy cập camera/microphone
     async function startLocalStream() {
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -41,68 +49,98 @@
       }
     }
 
-    async function createPeerConnection() {
-      const configuration = {
-        iceServers: {
-          "username": "aXI8jrj2UXTQnXhIw9AIC-MDgIcyhDy35_UMWdG67ug8vDZXLxL4JK2_JI_9dms0AAAAAGdjpw5oaW5kZXY5dGg=",
-          "urls": [
-            "stun:hk-turn1.xirsys.com",
-            "turn:hk-turn1.xirsys.com:80?transport=udp",
-            "turn:hk-turn1.xirsys.com:3478?transport=udp",
-            "turn:hk-turn1.xirsys.com:80?transport=tcp",
-            "turn:hk-turn1.xirsys.com:3478?transport=tcp",
-            "turns:hk-turn1.xirsys.com:443?transport=tcp",
-            "turns:hk-turn1.xirsys.com:5349?transport=tcp"
-          ],
-          "credential": "59dcfc76-bdc5-11ef-91da-0242ac120004"
-        }
-      };
-
+    // Tạo Peer Connection
+    function createPeerConnection() {
       peerConnection = new RTCPeerConnection(configuration);
 
       // Thêm track từ local stream
-      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+      localStream.getTracks().forEach((track) => {
+        peerConnection.addTrack(track, localStream);
+      });
 
-      // Xử lý ICE candidate
-      peerConnection.onicecandidate = event => {
-        if (event.candidate) {
-          socket.emit('ice-candidate', event.candidate);
+      peerConnection.oniceconnectionstatechange = () => {
+        console.log('ICE Connection State:', peerConnection.iceConnectionState);
+        if (peerConnection.iceConnectionState === 'failed') {
+          alert("ICE connection failed. Trying to reconnect...");
+          peerConnection.restartIce();
         }
       };
 
-      // Xử lý remote stream
-      peerConnection.ontrack = event => {
+      // Gửi ICE Candidate qua signaling server
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          socket.emit('candidate', { candidate: event.candidate });
+        }
+      };
+
+      // Nhận track từ remote peer
+      peerConnection.ontrack = (event) => {
         remoteVideo.srcObject = event.streams[0];
       };
     }
 
-    startCallButton.addEventListener('click', async () => {
-      await startLocalStream();
-      await createPeerConnection();
-      // Thêm logic để tạo offer/answer và trao đổi ICE candidates
-    });
+    // Lắng nghe sự kiện từ signaling server
+    socket.on('offer', async (data) => {
+      if (peerConnection && peerConnection.signalingState !== 'stable') {
+        console.warn('PeerConnection is not stable, skipping offer');
+        return;
+      }
 
-    socket.on('ice-candidate', async (candidate) => {
       try {
-        await peerConnection.addIceCandidate(candidate);
+        createPeerConnection();
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        socket.emit('answer', { answer });
       } catch (error) {
-        console.error('Error adding received ice candidate', error);
+        console.error('Error handling offer:', error);
       }
     });
 
-    socket.on('offer', async (offer) => {
+    socket.on('answer', async (data) => {
+      if (!peerConnection || peerConnection.signalingState !== 'have-local-offer') {
+        console.warn('Invalid signaling state for setting answer:', peerConnection?.signalingState);
+        return;
+      }
+
+      try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+      } catch (error) {
+        console.error('Error setting remote description:', error);
+      }
+    });
+
+    socket.on('candidate', async (data) => {
       if (!peerConnection) {
-        await createPeerConnection();
+        console.warn('PeerConnection not ready to handle candidate');
+        return;
       }
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
-      socket.emit('answer', answer);
+
+      try {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+      } catch (error) {
+        console.error('Error adding ICE candidate:', error);
+      }
     });
 
-    socket.on('answer', async (answer) => {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-    });
+    // Bắt đầu gọi video
+    async function startCall() {
+      createPeerConnection();
+      try {
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socket.emit('offer', { offer });
+      } catch (error) {
+        console.error('Error starting call:', error);
+      }
+    }
+
+    // Gắn sự kiện cho nút Start Call
+    startCallButton.addEventListener('click', startCall);
+
+    // Khởi chạy local video stream
+    startLocalStream();
+
   </script>
 </body>
 
