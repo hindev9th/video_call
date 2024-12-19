@@ -104,7 +104,7 @@
       }
 
       try {
-        createPeerConnection();
+        await createPeerConnection();
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
@@ -142,7 +142,7 @@
 
     // Bắt đầu gọi video
     async function startCall() {
-      createPeerConnection();
+      await createPeerConnection();
       try {
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
