@@ -5,160 +5,41 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WebRTC Video Call</title>
+  <link rel="stylesheet" href="./public/css/style.css">
+  <script async src="https://cdn.socket.io/4.7.1/socket.io.min.js"></script>
+
   <style>
-    video {
-      width: 300px;
-      height: 200px;
-      margin: 10px;
-      border: 1px solid black;
-    }
+
   </style>
 </head>
 
 <body>
-  <h1>WebRTC Video Call</h1>
-  <video id="localVideo" autoplay playsinline muted></video>
-  <video id="remoteVideo" autoplay playsinline></video>
-  <br>
-  <button id="startCall">Start Call</button>
-  <script src="https://cdn.socket.io/4.7.1/socket.io.min.js"></script>
-  <script>
-    const socket = io('https://socket-server-grrg.onrender.com');
-    const localVideo = document.getElementById('localVideo');
-    const remoteVideo = document.getElementById('remoteVideo');
-    const startCallButton = document.getElementById('startCall');
+  <div class="container">
+    <h1 id="group-id"></h1>
+    <div class="local-video-container">
+      <video id="localVideo" autoplay playsinline muted></video>
+    </div>
+    <div class="remote-video-container">
+      <video id="remoteVideo" autoplay playsinline></video>
+    </div>
 
-    let localStream;
-    let peerConnection;
-    // const configuration = {
-    //   iceServers: [
-    //     { urls: 'stun:stun.l.google.com:19302' },
-    //     { urls: 'stun:stun1.l.google.com:19302' },
-    //     { urls: 'stun:stun2.l.google.com:19302' },
-    //     { urls: 'stun:stun3.l.google.com:19302' },
-    //   ]
-    // };
 
-    // Truy cập camera/microphone
-    async function startLocalStream() {
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        localVideo.srcObject = localStream;
-      } catch (error) {
-        console.error('Error accessing media devices:', error);
-      }
-    }
+    <div class="action-calling">
+      <button id="toggleMic">Mute/Unmute Microphone</button>
+      <button id="toggleCam">Turn On/Off Camera</button>
+      <button id="cancelCall">Cancel Call</button>
+    </div>
+    <br>
+    <div class="action-zoom">
+      <input type="text" id="room-name" placeholder="Enter Room ID">
+      <input type="text" id="username" placeholder="Enter username">
+      <button id="startCall">Create Zoom</button>
+      <button id="joinZoom">Join Zoom</button>
+    </div>
+  </div>
 
-    async function getXirsysIceServers() {
-      try {
-        const response = await fetch('https://global.xirsys.net/_turn/MyFirstApp', {
-          method: 'PUT',
-          headers: {
-            'Authorization': 'Basic ' + btoa('hindev9th:7e6b2f8c-bdc4-11ef-add9-0242ac130002')
-          }
-        });
-        const data = await response.json();
-        return data.v.iceServers;
-      } catch (error) {
-        console.error('Error fetching Xirsys ICE servers:', error);
-        return [];
-      }
-    }
 
-    // Tạo Peer Connection
-    async function createPeerConnection() {
-      const server = await getXirsysIceServers();
-      peerConnection = new RTCPeerConnection({ iceServers: server });
-
-      // Thêm track từ local stream
-      localStream.getTracks().forEach((track) => {
-        peerConnection.addTrack(track, localStream);
-      });
-
-      peerConnection.oniceconnectionstatechange = () => {
-        console.log('ICE Connection State:', peerConnection.iceConnectionState);
-        if (peerConnection.iceConnectionState === 'failed') {
-          alert("ICE connection failed. Trying to reconnect...");
-          peerConnection.restartIce();
-        }
-      };
-
-      // Gửi ICE Candidate qua signaling server
-      peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-          socket.emit('candidate', { candidate: event.candidate });
-        }
-      };
-
-      // Nhận track từ remote peer
-      peerConnection.ontrack = (event) => {
-        remoteVideo.srcObject = event.streams[0];
-      };
-    }
-
-    // Lắng nghe sự kiện từ signaling server
-    socket.on('offer', async (data) => {
-      if (peerConnection && peerConnection.signalingState !== 'stable') {
-        console.warn('PeerConnection is not stable, skipping offer');
-        return;
-      }
-
-      try {
-        await createPeerConnection();
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        socket.emit('answer', { answer });
-      } catch (error) {
-        console.error('Error handling offer:', error);
-      }
-    });
-
-    socket.on('answer', async (data) => {
-      if (!peerConnection || peerConnection.signalingState !== 'have-local-offer') {
-        console.warn('Invalid signaling state for setting answer:', peerConnection?.signalingState);
-        return;
-      }
-
-      try {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-      } catch (error) {
-        console.error('Error setting remote description:', error);
-      }
-    });
-
-    socket.on('candidate', async (data) => {
-      if (!peerConnection) {
-        console.warn('PeerConnection not ready to handle candidate');
-        return;
-      }
-
-      try {
-        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-      } catch (error) {
-        console.error('Error adding ICE candidate:', error);
-      }
-    });
-
-    // Bắt đầu gọi video
-    async function startCall() {
-      await createPeerConnection();
-      try {
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-        socket.emit('offer', { offer });
-      } catch (error) {
-        console.error('Error starting call:', error);
-      }
-    }
-
-    // Gắn sự kiện cho nút Start Call
-    startCallButton.addEventListener('click', startCall);
-
-    // Khởi chạy local video stream
-    startLocalStream();
-
-  </script>
+  <script defer type="module" src="./public/scripts/main.js"></script>
 </body>
 
 </html>
